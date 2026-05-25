@@ -85,18 +85,21 @@ sequenceDiagram
 
     You->>graph.py: python langgraph-agent/src/graph.py broken.py
     graph.py->>fix_node: send code to Claude
+    fix_node-->>LangSmith: trace fix step
     fix_node->>run_node: run fixed code
+    run_node-->>LangSmith: trace run step
 
     alt Run failed and retries left
         run_node->>fix_node: retry with error
-    else Run succeeded
+    else Run succeeded or max retries hit
         run_node->>review_node: review code quality
+        review_node-->>LangSmith: trace review step
         review_node->>test_node: generate unit tests
+        test_node-->>LangSmith: trace test step
         test_node->>log_node: save everything to log
-        log_node-->>You: log path
+        log_node-->>LangSmith: trace log step
+        log_node-->>You: print log path
     end
-
-    graph.py-->>LangSmith: full trace (all nodes)
 ```
 
 ---
