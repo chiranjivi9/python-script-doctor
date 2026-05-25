@@ -1,27 +1,35 @@
 # Python Script Doctor & Logger
 
-An agent that takes a broken Python script, fixes it with Claude AI, runs it automatically, and logs the result. Available as a CLI tool and as an MCP server so Claude can call it directly from chat.
+An agent that takes a broken Python script, fixes it with Claude AI, runs it, reviews it, generates tests, and logs everything. Available as a CLI tool, an MCP server, and a LangGraph multi-agent flow.
 
-## The 3-Step Pipeline
+## The Pipeline
 
 ```
-[ Your Broken Code ] ──> [ 1. Fixer Agent ] ──> [ 2. Executor ] ──> [ 3. Logger ]
+[ Broken Code ] → [ Fix ] → [ Run ] → [ Review ] → [ Test ] → [ Log ]
+                               ↑           ↑
+                          retry loop   LangSmith
+                         (up to 3x)    tracing
 ```
 
 | Step | What Happens |
 |---|---|
-| 1. Fixer | Sends broken code to Claude → gets fixed code back |
-| 2. Executor | Runs the fixed code using Python's subprocess |
-| 3. Logger | Writes a timestamped log file: status, attempts, output |
+| Fix | Sends broken code to Claude → gets fixed code back |
+| Run | Runs the fixed code using Python subprocess |
+| Review | Claude reviews the fixed code for quality and best practices |
+| Test | Claude generates pytest unit tests for the fixed code |
+| Log | Saves fixed code, review, and tests to a timestamped log file |
 
 If execution fails, the real error is fed back to Claude and the cycle retries (up to 3 times). That feedback loop is what makes this an **agent**, not just a script.
 
-## Two Ways to Use It
+---
 
-| Mode | How | When |
+## Three Ways to Use It
+
+| Mode | How | Tracing |
 |---|---|---|
-| CLI | `venv/bin/python src/agent.py yourfile.py` | Run manually from terminal |
-| MCP Server | Say "Fix and run samples/file.py" in Claude Desktop | Claude runs it for you |
+| CLI | `venv/bin/python src/agent.py yourfile.py` | None |
+| MCP Server | Say "Fix and run samples/file.py" in Claude Desktop | None |
+| LangGraph | `venv/bin/python langgraph-agent/src/graph.py yourfile.py` | LangSmith |
 
 ---
 
@@ -47,13 +55,48 @@ sequenceDiagram
         subprocess-->>agent.py: output or traceback
 
         alt Run succeeded
-            agent.py->>logs/: write_log(SUCCESS, attempts)
+            agent.py->>Claude API: review_code(code)
+            Claude API-->>agent.py: review feedback
+            agent.py->>Claude API: write_code_test(code)
+            Claude API-->>agent.py: unit tests
+            agent.py->>logs/: write_log(code, review, tests)
         else Run failed
             agent.py->>agent.py: error = traceback → retry
         end
     end
 
     agent.py-->>You: print result + log path
+```
+
+---
+
+### LangGraph Flow (multi-agent with tracing)
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant graph.py
+    participant fix_node
+    participant run_node
+    participant review_node
+    participant test_node
+    participant log_node
+    participant LangSmith
+
+    You->>graph.py: python langgraph-agent/src/graph.py broken.py
+    graph.py->>fix_node: send code to Claude
+    fix_node->>run_node: run fixed code
+
+    alt Run failed and retries left
+        run_node->>fix_node: retry with error
+    else Run succeeded
+        run_node->>review_node: review code quality
+        review_node->>test_node: generate unit tests
+        test_node->>log_node: save everything to log
+        log_node-->>You: log path
+    end
+
+    graph.py-->>LangSmith: full trace (all nodes)
 ```
 
 ---
@@ -95,7 +138,6 @@ sequenceDiagram
 
 ```bash
 # 1. Create venv with Python 3.11 (quote the path if it contains spaces)
-# Find your Python 3.11 path with: which python3.11
 python3.11 -m venv venv
 
 # 2. Install dependencies
@@ -105,6 +147,7 @@ venv/bin/pip install -r requirements.txt
 # 3. Create your .env file
 cp .env.example .env
 # Edit .env → add your real Anthropic API key
+# Optional: add LANGCHAIN_API_KEY for LangSmith tracing
 
 # 4. Add billing credits
 # https://console.anthropic.com → Billing → Add credits ($5 minimum)
@@ -123,11 +166,20 @@ venv/bin/python src/agent.py samples/broken_example.py
 # Test with runtime errors (exercises the retry loop)
 venv/bin/python src/agent.py samples/broken_hard.py
 
-# Try on your own file
-venv/bin/python src/agent.py samples/your_script.py
-
-# Check logs
+# Check logs (contains fixed code, review, and tests)
 ls logs/
+cat logs/<latest>.log
+```
+
+---
+
+## LangGraph Usage
+
+```bash
+# Run the multi-agent flow (traces appear in LangSmith)
+venv/bin/python langgraph-agent/src/graph.py samples/broken_example.py
+
+# View traces at https://smith.langchain.com
 ```
 
 ---
@@ -153,20 +205,28 @@ Verify it's connected: ask Claude "What MCP tools do you have?" — it should li
 ```
 code-review-agent/
 ├── src/
-│   ├── agent.py            ← CLI agent (agentic retry loop)
-│   └── mcp_server.py       ← MCP server (same logic, exposed as tools)
+│   ├── agent.py            ← CLI agent (fix, run, review, test, log)
+│   └── mcp_server.py       ← MCP server (fix_and_run, list_logs, read_log)
+├── langgraph-agent/
+│   └── src/
+│       ├── state.py        ← shared AgentState TypedDict
+│       ├── nodes.py        ← fix, run, review, test, log nodes
+│       └── graph.py        ← wires nodes into a runnable graph
 ├── samples/
 │   ├── broken_example.py   ← 4 syntax bugs
 │   └── broken_hard.py      ← runtime errors (exercises retry loop)
+├── tests/
+│   └── test_agent.py       ← 16 pytest tests (one per spec)
 ├── docs/
 │   ├── status.md           ← current state
 │   ├── progress.md         ← session-by-session log
 │   └── decision.md         ← why key choices were made
-├── logs/                   ← auto-created on first run
+├── logs/                   ← auto-created on first run (gitignored)
 ├── venv/                   ← Python 3.11 virtual environment (gitignored)
 ├── .env                    ← your real API key (gitignored)
 ├── .env.example            ← safe template to share
-├── .gitignore
+├── SPEC.md                 ← behavioral contract for agent.py functions
+├── CLAUDE.md               ← Claude Code session conventions
 ├── requirements.txt
 └── README.md
 ```
@@ -179,4 +239,6 @@ code-review-agent/
 - How to store secrets safely with .env files
 - How to log structured data to files (the MLOps entry point)
 - How MCP servers expose Python functions as tools Claude can call
+- How LangGraph turns agent logic into a visual, traceable graph
+- Why LangSmith only traces LangChain/LangGraph calls (not raw SDK calls)
 - Why paths with spaces must always be quoted in shell commands

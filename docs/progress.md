@@ -35,7 +35,7 @@
 
 ```
 Attempt 1: fix(broken_code)      → run → FAILED
-Attempt 2: fix(code, error)      → run → FAILED  
+Attempt 2: fix(code, error)      → run → FAILED
 Attempt 3: fix(code, error)      → run → SUCCESS
 ```
 
@@ -47,9 +47,12 @@ Attempt 3: fix(code, error)      → run → SUCCESS
 - Built `mcp_server.py` using FastMCP — exposes the agent as 3 Claude tools
 - Tools: `fix_and_run`, `list_logs`, `read_log`
 - Fixed broken venv: original used Mac system Python 3.9 (too old for mcp); recreated with Anaconda Python 3.11 using quoted paths to handle space in project directory
-- Registered MCP server in Claude Desktop config at `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Registered MCP server in Claude Desktop config
 - Tested MCP server starts cleanly
 - Added explanatory comments to `agent.py` and `mcp_server.py`
+- Wrote SPEC.md + 16 pytest tests (all passing)
+- Created CLAUDE.md for Claude Code session conventions
+- Created GitHub repo and pushed via SSH
 
 ### Key Learnings
 - MCP changes the interface, not the logic — same fix_code/run_code/write_log, different caller
@@ -57,9 +60,26 @@ Attempt 3: fix(code, error)      → run → SUCCESS
 - Paths with spaces must be quoted in shell commands — unquoted spaces split into separate arguments and break venv creation
 - `os.chdir(PROJECT_ROOT)` in mcp_server.py pins the working directory so relative paths work regardless of where Claude Desktop launches the server
 - `sys.executable` in subprocess.run ensures the same Python interpreter runs the fixed code
+- Spec-driven development: write the spec first, then tests, then code
 
-### What's Next
-- Add Anthropic billing credits
-- First live run via CLI: `venv/bin/python src/agent.py samples/broken_example.py`
-- First live run via MCP: ask Claude Desktop to fix a script
-- Try the agent on your own broken Python files
+---
+
+## 2026-05-25 — Session 4
+
+### Done
+- Added LangGraph multi-agent flow in `langgraph-agent/`
+- Built 5 nodes: `fix_node`, `run_node`, `review_node`, `test_node`, `log_node`
+- Shared `AgentState` TypedDict carries state between all nodes
+- Wired conditional edge (retry loop) via `router()` function: retries fix→run if code fails, moves to review if it succeeds or max retries hit
+- Enabled LangSmith tracing via `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` in `.env`
+- Added `review_code()` and `write_code_test()` to `src/agent.py`
+- Wired review and test steps into CLI `run_doctor()` — log files now contain all 4 sections
+- Updated `write_log()` signature to accept `review` and `tests` parameters
+- Tested LangGraph flow on broken_example.py, broken_hard.py — all pass in 1 attempt
+
+### Key Learnings
+- LangGraph nodes are plain Python functions: receive full state, return only changed fields
+- LangSmith only traces LangChain/LangGraph calls — raw `anthropic` SDK calls are invisible to it
+- Conditional edges use a `router()` function that reads state and returns a node name string
+- `app.stream()` gives per-node diffs; `app.invoke()` gives the merged final state
+- `PROJECT_ROOT` must be computed explicitly when running from a subdirectory — `load_dotenv()` with a relative path silently fails

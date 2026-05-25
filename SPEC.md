@@ -32,9 +32,33 @@ Tests in `tests/test_agent.py` verify every spec listed here.
 
 ---
 
-## `write_log(script_name, status, fixed_code, output, attempts) -> str`
+## `review_code(code) -> tuple[bool, str]`
 
-**Purpose:** Append a structured log entry to a timestamped file in `logs/`.
+**Purpose:** Send fixed code to Claude for a quality review.
+
+| # | Spec |
+|---|---|
+| 17 | Returns `(True, review_text)` on success |
+| 18 | Returns `(False, error_message)` on failure |
+| 19 | Review text is a non-empty string when successful |
+
+---
+
+## `write_code_test(code) -> tuple[bool, str]`
+
+**Purpose:** Ask Claude to generate pytest unit tests for the fixed code.
+
+| # | Spec |
+|---|---|
+| 20 | Returns `(True, test_code)` on success |
+| 21 | Returns `(False, error_message)` on failure |
+| 22 | Generated tests are a non-empty string when successful |
+
+---
+
+## `write_log(script_name, status, fixed_code, output, attempts, review, tests) -> str`
+
+**Purpose:** Save a structured log entry to a timestamped file in `logs/`.
 
 | # | Spec |
 |---|---|
@@ -45,3 +69,5 @@ Tests in `tests/test_agent.py` verify every spec listed here.
 | 14 | Log file contains the attempt count in the format `N/MAX_RETRIES` |
 | 15 | Log file contains the fixed code |
 | 16 | Log file contains the output (or `(no output)` if empty) |
+| 23 | Log file contains the review section (or `(no review)` if empty) |
+| 24 | Log file contains the tests section (or `(no tests)` if empty) |

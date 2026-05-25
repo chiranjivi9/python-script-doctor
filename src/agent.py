@@ -57,6 +57,44 @@ def fix_code(code: str, error: str = None) -> str:
 
     return fixed
 
+def review_code(code: str) -> str:
+    client = anthropic.Anthropic()
+    
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user", 
+                    "content": f"Review this python code for quality and best practices. Be concise.\n\n{code}"
+                }
+            ]
+        )
+        
+        return (True, response.content[0].text)
+    except:
+        return (False, f"Script review_code failed")
+         
+
+def write_code_test(code: str) -> str:
+    client = anthropic.Anthropic()
+    
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user", 
+                    "content": f"Write unit test for this python code for quality and best practices. Be concise.\n\n{code}"
+                }
+            ]
+        )
+        
+        return (True, response.content[0].text)
+    except:
+        return (False, f"write_code_test faile")
 
 def run_code(code: str) -> tuple[bool, str]:
     """
@@ -88,7 +126,7 @@ def run_code(code: str) -> tuple[bool, str]:
             os.remove(temp_file)
 
 
-def write_log(script_name: str, status: str, fixed_code: str, output: str, attempts: int) -> str:
+def write_log(script_name: str, status: str, fixed_code: str, output: str, attempts: int, review: str = "", tests: str = "") -> str:
     """
     Saves the result of a run to a timestamped log file in the logs/ folder.
     This is the MLOps part — tracking what ran, when, and what happened.
@@ -108,6 +146,10 @@ def write_log(script_name: str, status: str, fixed_code: str, output: str, attem
         f.write(fixed_code)
         f.write("\n\n--- Output ---\n")
         f.write(output if output.strip() else "(no output)")
+        f.write("\n\n--- Review ---\n")
+        f.write(review if review.strip() else "(no review)")
+        f.write("\n\n--- Tests ---\n")
+        f.write(tests if tests.strip() else "(no tests)")
 
     return log_path
 
@@ -164,8 +206,19 @@ def run_doctor(script_path: str):
 
     status = "SUCCESS" if success else "FAILED"
 
+    review = ""
+    tests = ""
+    if success:
+        print("  Review  Sending to Claude AI...")
+        _, review = review_code(code)
+        print("          Done.")
+
+        print("  Tests   Generating unit tests...")
+        _, tests = write_code_test(code)
+        print("          Done.")
+
     print("Logging result...")
-    log_path = write_log(script_name, status, code, output, attempt)
+    log_path = write_log(script_name, status, code, output, attempt, review, tests)
     print(f"Saved  : {log_path}\n")
 
     print(f"{'=' * 40}")

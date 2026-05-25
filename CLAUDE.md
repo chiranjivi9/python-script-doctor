@@ -17,6 +17,9 @@ venv/bin/pytest tests/ -v
 # Run the CLI agent
 venv/bin/python src/agent.py samples/broken_example.py
 
+# Run the LangGraph multi-agent flow (traces to LangSmith)
+venv/bin/python langgraph-agent/src/graph.py samples/broken_example.py
+
 # Start the MCP server manually (Claude Desktop starts it automatically)
 venv/bin/python src/mcp_server.py
 ```
@@ -24,11 +27,14 @@ venv/bin/python src/mcp_server.py
 ## Project Structure
 
 ```
-src/agent.py         ← CLI agent (fix_code, run_code, write_log, run_doctor)
-src/mcp_server.py    ← MCP server (imports from agent.py, exposes 3 tools)
-tests/test_agent.py  ← 16 pytest tests, one per spec in SPEC.md
-samples/             ← broken Python files for testing the agent
-logs/                ← auto-generated, gitignored
+src/agent.py                    ← CLI agent (fix, run, review, test, log)
+src/mcp_server.py               ← MCP server (imports from agent.py, exposes 3 tools)
+langgraph-agent/src/state.py    ← shared AgentState TypedDict
+langgraph-agent/src/nodes.py    ← fix, run, review, test, log nodes
+langgraph-agent/src/graph.py    ← wires nodes into a runnable graph
+tests/test_agent.py             ← 16 pytest tests, one per spec in SPEC.md
+samples/                        ← broken Python files for testing the agent
+logs/                           ← auto-generated, gitignored
 ```
 
 ## Conventions
